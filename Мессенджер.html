@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Мессенджер</title>
+<style>
+  :root { --bg:#eef2f7; --panel:#fff; --side:#f7f9fc; --text:#1d2433; --muted:#7a8396; --accent:#3b82f6; --them:#e9edf4; --border:#e1e6ef; color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#0e1320; --panel:#151c2c; --side:#111828; --text:#e6ebf5; --muted:#8793a9; --accent:#60a5fa; --them:#222c42; --border:#26304a; color-scheme: dark; }
+  }
+  :root[data-theme="dark"] { --bg:#0e1320; --panel:#151c2c; --side:#111828; --text:#e6ebf5; --muted:#8793a9; --accent:#60a5fa; --them:#222c42; --border:#26304a; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; font-size:15px; }
+  button, input, textarea { font: inherit; }
+  .hidden { display:none !important; }
+  .center { min-height:100%; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:18px; padding:24px; width:100%; max-width:380px; }
+  .card h1 { margin:0 0 6px; font-size:1.3rem; }
+  .muted { color:var(--muted); font-size:0.9rem; margin:0 0 14px; }
+  input[type=text], input[type=email], input[type=number], textarea {
+    width:100%; padding:11px 13px; border-radius:12px; border:1px solid var(--border); background:var(--bg); color:var(--text); outline:none; margin-bottom:10px;
+  }
+  .btn { width:100%; padding:11px 14px; border:0; border-radius:12px; background:var(--accent); color:#fff; font-weight:600; cursor:pointer; }
+  .btn.ghost { background:transparent; color:var(--accent); border:1px solid var(--border); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .err { color:#ef4444; font-size:0.88rem; min-height:1.2em; margin:4px 0 0; }
+  .app { height:100%; display:grid; grid-template-columns: 300px 1fr; }
+  .side { background:var(--side); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0; }
+  .side-head { padding:14px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .side-head h2 { margin:0; font-size:1.05rem; }
+  .small { padding:6px 10px; font-size:0.8rem; border-radius:999px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer; }
+  .newchat { padding:10px 14px; border-bottom:1px solid var(--border); display:flex; gap:8px; }
+  .newchat input { margin:0; padding:9px 11px; }
+  .newchat button { width:auto; padding:9px 12px; }
+  .chats { overflow-y:auto; flex:1; }
+  .chat-item { padding:12px 14px; cursor:pointer; border-bottom:1px solid var(--border); }
+  .chat-item.active { background:var(--panel); box-shadow: inset 3px 0 0 var(--accent); }
+  .chat-name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .main { display:flex; flex-direction:column; min-height:0; min-width:0; background:var(--bg); }
+  .main-head { padding:14px 18px; background:var(--panel); border-bottom:1px solid var(--border); display:flex; gap:10px; align-items:center; }
+  .main-head b { font-size:1rem; }
+  .messages { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:6px; }
+  .msg { max-width:70%; padding:8px 12px; border-radius:16px; background:var(--them); white-space:pre-wrap; word-wrap:break-word; }
+  .msg.me { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
+  .msg.them { align-self:flex-start; border-bottom-left-radius:4px; }
+  .msg .who { display:block; font-size:0.75rem; opacity:.75; margin-bottom:2px; }
+  .msg .time { display:block; font-size:0.7rem; opacity:.7; text-align:right; margin-top:2px; }
+  .empty { margin:auto; color:var(--muted); text-align:center; padding:20px; }
+  .composer { display:flex; gap:10px; padding:12px; background:var(--panel); border-top:1px solid var(--border); }
+  .composer textarea { margin:0; resize:none; height:44px; max-height:120px; border-radius:22px; padding:11px 14px; }
+  .composer button { width:auto; border-radius:22px; padding:0 20px; }
+  .back { display:none; }
+  @media (max-width:720px) {
+    .app { grid-template-columns: 1fr; }
+    .app.chat-open .side { display:none; }
+    .app:not(.chat-open) .main { display:none; }
+    .back { display:inline-block; }
+    .msg { max-width:85%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Экран входа: email -->
+<div class="center" id="screenEmail">
+  <div class="card">
+    <h1>Вход</h1>
+    <p class="muted">Введи email, мы пришлём код.</p>
+    <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+    <button class="btn" id="sendCode">Получить код</button>
+    <p class="err" id="errEmail"></p>
+  </div>
+</div>
+
+<!-- Экран входа: код -->
+<div class="center hidden" id="screenCode">
+  <div class="card">
+    <h1>Код из письма</h1>
+    <p class="muted" id="codeHint"></p>
+    <input type="text" id="code" placeholder="123456" inputmode="numeric" autocomplete="one-time-code">
+    <button class="btn" id="verifyCode">Войти</button>
+    <button class="btn ghost" id="backEmail" style="margin-top:8px">Другой email</button>
+    <p class="err" id="errCode"></p>
+  </div>
+</div>
+
+<!-- Экран профиля -->
+<div class="center hidden" id="screenProfile">
+  <div class="card">
+    <h1>Создай профиль</h1>
+    <p class="muted">Логин — латиница, цифры и _, от 3 до 24 символов. По нему тебя найдут.</p>
+    <input type="text" id="username" placeholder="логин, например ivan_77">
+    <input type="text" id="displayName" placeholder="Имя, которое видят другие">
+    <button class="btn" id="saveProfile">Продолжить</button>
+    <p class="err" id="errProfile"></p>
+  </div>
+</div>
+
+<!-- Основной экран -->
+<div class="app hidden" id="screenApp">
+  <aside class="side">
+    <div class="side-head">
+      <h2 id="meName">Чаты</h2>
+      <div style="display:flex;gap:6px">
+        <button class="small" id="theme">Тема</button>
+        <button class="small" id="logout">Выйти</button>
+      </div>
+    </div>
+    <div class="newchat">
+      <input type="text" id="findUser" placeholder="логин собеседника">
+      <button class="btn" id="startChat">Написать</button>
+    </div>
+    <p class="err" id="errChat" style="padding:0 14px"></p>
+    <div class="chats" id="chatList"></div>
+  </aside>
+  <main class="main">
+    <div class="main-head">
+      <button class="small back" id="backToList">←</button>
+      <b id="chatTitle">Выбери чат</b>
+    </div>
+    <div class="messages" id="messages"></div>
+    <form class="composer" id="composer">
+      <textarea id="msgInput" placeholder="Написать сообщение" rows="1" disabled></textarea>
+      <button class="btn" type="submit" id="sendBtn" disabled>Отправить</button>
+    </form>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+(function () {
+  var root = document.documentElement;
+  document.getElementById("theme").addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme") === "dark" ||
+      (!root.getAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
+    root.setAttribute("data-theme", dark ? "light" : "dark");
+  });
+
+  var SUPABASE_URL = "https://vaihqvlpduogmsqkaxxg.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_RaRa9NJNf7MyF-X0Vw2aKQ_Pm9zFGZw";
+  var sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  var me = null;          // profile текущего пользователя
+  var emailAddr = "";
+  var activeChat = null;  // { id, title }
+  var channel = null;
+
+  function $(id) { return document.getElementById(id); }
+  function show(id) {
+    ["screenEmail", "screenCode", "screenProfile", "screenApp"].forEach(function (s) { $(s).classList.toggle("hidden", s !== id); });
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]; }); }
+  function t(ts) { var d = new Date(ts); return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"); }
+
+  // ---------- Вход ----------
+  $("sendCode").addEventListener("click", async function () {
+    var email = $("email").value.trim();
+    $("errEmail").textContent = "";
+    if (!/^\S+@\S+\.\S+$/.test(email)) { $("errEmail").textContent = "Введи корректный email"; return; }
+    this.disabled = true;
+    var r = await sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true } });
+    this.disabled = false;
+    if (r.error) { $("errEmail").textContent = "Не удалось отправить код: " + r.error.message; return; }
+    emailAddr = email;
+    $("codeHint").textContent = "Код отправлен на " + email;
+    show("screenCode");
+    $("code").focus();
+  });
+
+  $("backEmail").addEventListener("click", function () { show("screenEmail"); });
+
+  $("verifyCode").addEventListener("click", async function () {
+    $("errCode").textContent = "";
+    var token = $("code").value.trim();
+    if (!token) { $("errCode").textContent = "Введи код"; return; }
+    this.disabled = true;
+    var r = await sb.auth.verifyOtp({ email: emailAddr, token: token, type: "email" });
+    this.disabled = false;
+    if (r.error) { $("errCode").textContent = "Код неверный или устарел"; return; }
+    await afterLogin();
+  });
+
+  async function afterLogin() {
+    var u = (await sb.auth.getUser()).data.user;
+    if (!u) { show("screenEmail"); return; }
+    var p = await sb.from("profiles").select("*").eq("id", u.id).maybeSingle();
+    if (p.data) { me = p.data; enterApp(); }
+    else { show("screenProfile"); $("username").focus(); }
+  }
+
+  $("saveProfile").addEventListener("click", async function () {
+    $("errProfile").textContent = "";
+    var username = $("username").value.trim().toLowerCase();
+    var name = $("displayName").value.trim();
+    if (!/^[a-z0-9_]{3,24}$/.test(username)) { $("errProfile").textContent = "Логин: 3–24 символа, латиница, цифры и _"; return; }
+    if (!name) { $("errProfile").textContent = "Введи имя"; return; }
+    var u = (await sb.auth.getUser()).data.user;
+    this.disabled = true;
+    var r = await sb.from("profiles").insert({ id: u.id, username: username, display_name: name });
+    this.disabled = false;
+    if (r.error) { $("errProfile").textContent = r.error.code === "23505" ? "Такой логин уже занят" : "Ошибка: " + r.error.message; return; }
+    me = { id: u.id, username: username, display_name: name };
+    enterApp();
+  });
+
+  function enterApp() {
+    $("meName").textContent = me.display_name;
+    show("screenApp");
+    loadChats();
+    subscribe();
+  }
+
+  $("logout").addEventListener("click", async function () {
+    if (channel) sb.removeChannel(channel);
+    await sb.auth.signOut();
+    me = null; activeChat = null;
+    show("screenEmail");
+  });
+
+  // ---------- Чаты ----------
+  async function loadChats() {
+    var list = $("chatList");
+    var r = await sb.from("chats").select("id, title, is_group, created_at").order("created_at", { ascending: false });
+    list.innerHTML = "";
+    if (!r.data || !r.data.length) { list.innerHTML = '<p class="muted" style="padding:14px">Чатов пока нет. Найди собеседника по логину выше.</p>'; return; }
+    for (var i = 0; i < r.data.length; i++) {
+      var c = r.data[i];
+      var title = await chatTitle(c);
+      var el = document.createElement("div");
+      el.className = "chat-item" + (activeChat && activeChat.id === c.id ? " active" : "");
+      el.innerHTML = '<div class="chat-name">' + esc(title) + '</div>';
+      (function (chat, t2) { el.addEventListener("click", function () { openChat({ id: chat.id, title: t2 }); }); })(c, title);
+      list.appendChild(el);
+    }
+  }
+
+  async function chatTitle(c) {
+    if (c.title) return c.title;
+    var m = await sb.from("chat_members").select("user_id, profiles(username, display_name)").eq("chat_id", c.id);
+    var other = (m.data || []).filter(function (x) { return x.user_id !== me.id; })[0];
+    if (!other || !other.profiles) return "Чат";
+    return other.profiles.display_name + " (@" + other.profiles.username + ")";
+  }
+
+  $("startChat").addEventListener("click", async function () {
+    $("errChat").textContent = "";
+    var username = $("findUser").value.trim().toLowerCase().replace(/^@/, "");
+    if (!username) return;
+    if (username === me.username) { $("errChat").textContent = "Это ты :)"; return; }
+    var p = await sb.from("profiles").select("id, username, display_name").eq("username", username).maybeSingle();
+    if (!p.data) { $("errChat").textContent = "Пользователь не найден"; return; }
+    // Если личный чат уже есть, открываем его
+    var mine = await sb.from("chat_members").select("chat_id").eq("user_id", me.id);
+    var ids = (mine.data || []).map(function (x) { return x.chat_id; });
+    if (ids.length) {
+      var theirs = await sb.from("chat_members").select("chat_id").eq("user_id", p.data.id).in("chat_id", ids);
+      var shared = (theirs.data || []).map(function (x) { return x.chat_id; });
+      for (var i = 0; i < shared.length; i++) {
+        var c = await sb.from("chats").select("id, title, is_group").eq("id", shared[i]).eq("is_group", false).maybeSingle();
+        if (c.data) { $("findUser").value = ""; await loadChats(); openChat({ id: c.data.id, title: await chatTitle(c.data) }); return; }
+      }
+    }
+    // Иначе создаём новый чат; id генерируем сами, чтобы не зависеть от чтения после вставки
+    var chatId = crypto.randomUUID();
+    var r1 = await sb.from("chats").insert({ id: chatId, is_group: false, created_by: me.id });
+    if (r1.error) { $("errChat").textContent = "Ошибка: " + r1.error.message; return; }
+    var r2 = await sb.from("chat_members").insert([
+      { chat_id: chatId, user_id: me.id },
+      { chat_id: chatId, user_id: p.data.id }
+    ]);
+    if (r2.error) { $("errChat").textContent = "Ошибка: " + r2.error.message; return; }
+    $("findUser").value = "";
+    await loadChats();
+    openChat({ id: chatId, title: p.data.display_name + " (@" + p.data.username + ")" });
+  });
+
+  async function openChat(chat) {
+    activeChat = chat;
+    $("chatTitle").textContent = chat.title;
+    $("msgInput").disabled = false;
+    $("sendBtn").disabled = false;
+    $("app") ; document.querySelector(".app").classList.add("chat-open");
+    await loadMessages();
+    await loadChats();
+  }
+
+  $("backToList").addEventListener("click", function () { document.querySelector(".app").classList.remove("chat-open"); });
+
+  // ---------- Сообщения ----------
+  async function loadMessages() {
+    var box = $("messages");
+    box.innerHTML = "";
+    if (!activeChat) return;
+    var r = await sb.from("messages").select("id, sender_id, body, created_at").eq("chat_id", activeChat.id).order("created_at", { ascending: true }).limit(300);
+    var names = await senderNames(activeChat.id);
+    (r.data || []).forEach(function (m) { box.appendChild(renderMsg(m, names)); });
+    if (!r.data || !r.data.length) box.innerHTML = '<div class="empty">Пока нет сообщений. Напиши первым.</div>';
+    box.scrollTop = box.scrollHeight;
+  }
+
+  var nameCache = {};
+  async function senderNames(chatId) {
+    var m = await sb.from("chat_members").select("user_id, profiles(display_name)").eq("chat_id", chatId);
+    var map = {};
+    (m.data || []).forEach(function (x) { map[x.user_id] = x.profiles ? x.profiles.display_name : "Пользователь"; });
+    return map;
+  }
+
+  function renderMsg(m, names) {
+    var el = document.createElement("div");
+    var mine = m.sender_id === me.id;
+    el.className = "msg " + (mine ? "me" : "them");
+    var who = mine ? "" : '<span class="who">' + esc(names[m.sender_id] || "Пользователь") + '</span>';
+    el.innerHTML = who + esc(m.body) + '<span class="time">' + t(m.created_at) + '</span>';
+    el.dataset.id = m.id;
+    return el;
+  }
+
+  $("composer").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var text = $("msgInput").value.trim();
+    if (!text || !activeChat) return;
+    $("msgInput").value = "";
+    var r = await sb.from("messages").insert({ chat_id: activeChat.id, sender_id: me.id, body: text });
+    if (r.error) { alert("Не отправилось: " + r.error.message); $("msgInput").value = text; }
+  });
+
+  $("msgInput").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("composer").requestSubmit(); }
+  });
+
+  function subscribe() {
+    if (channel) sb.removeChannel(channel);
+    channel = sb.channel("messages-feed").on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, async function (payload) {
+      var m = payload.new;
+      if (activeChat && m.chat_id === activeChat.id) {
+        if ($("messages").querySelector('[data-id="' + m.id + '"]')) return;
+        var empty = $("messages").querySelector(".empty");
+        if (empty) empty.remove();
+        var names = await senderNames(activeChat.id);
+        $("messages").appendChild(renderMsg(m, names));
+        $("messages").scrollTop = $("messages").scrollHeight;
+      } else {
+        loadChats();
+      }
+    }).subscribe();
+  }
+
+  // Старт: уже вошёл?
+  (async function init() {
+    var s = await sb.auth.getSession();
+    if (s.data.session) await afterLogin();
+    else show("screenEmail");
+  })();
+})();
+</script>
+</body>
+</html>
